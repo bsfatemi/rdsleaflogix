@@ -1,0 +1,7 @@
+library(dplyr)
+library(DBI)
+library(dbplyr)
+library(tidyr)
+library(jsonlite)
+library(purrr)
+library(stringr)

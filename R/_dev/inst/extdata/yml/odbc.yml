@@ -1,0 +1,20 @@
+host:
+  cypress2: 137.184.233.105
+  devel: happycabbage.dev
+  stage: 167.172.116.101
+  local: localhost
+  prod2:
+      host: 35.232.203.13
+      password: !expr Sys.getenv("HCA_DB_PWD")
+  dev2:
+      host: 34.173.68.0
+      password: !expr Sys.getenv("HCA_DB_PWD")
+args:
+  drv: !expr RPostgres::Postgres()
+  user: cabbage
+  port: 5432
+options:
+  connect_timeout: 10
+  timezone: UTC
+  application_name: rdleaflogix
+  client_encoding: UTF8

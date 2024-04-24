@@ -1,0 +1,12 @@
+name: pg_refresh_views
+title: pg_refresh_views
+username: bobbyf
+account: bobbyf
+server: happycabbage.app
+hostUrl: https://happycabbage.app/__api__
+appId: 222
+bundleId: 1282
+url: https://happycabbage.app/content/1f7898f7-0e1d-4bf5-a66e-abb2fe436e4d/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

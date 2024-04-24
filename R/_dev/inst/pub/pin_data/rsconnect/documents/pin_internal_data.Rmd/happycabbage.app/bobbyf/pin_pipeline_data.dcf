@@ -1,0 +1,12 @@
+name: pin_pipeline_data
+title: Pin pipeline data
+username: bobbyf
+account: bobbyf
+server: happycabbage.app
+hostUrl: https://happycabbage.app/__api__
+appId: 192
+bundleId: 1184
+url: https://happycabbage.app/content/de21ad23-a25b-4295-957b-c041adfd5f83/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

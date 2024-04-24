@@ -1,0 +1,99 @@
+---
+title: "Pin Data for rdleaflogix"
+author: "Bobby Fatemi"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+vignette: >
+  %\VignetteIndexEntry{Pin Data for rdleaflogix}
+  %\VignetteEngine{knitr::knitr}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+library(data.table)
+library(rdleaflogix)
+library(DBI)
+library(lubridate)
+library(pins)
+```
+
+> This pins data used internally by package `rdleaflogix`. Last updated at: `r lubridate::now()`
+
+------------------------------------------------------------------------
+
+### Make Connection
+
+```{r}
+apiKey <- Sys.getenv("CONNECT_API_KEY")
+apiUrl <- Sys.getenv("CONNECT_SERVER")
+board  <- board_connect(server = apiUrl, key = apiKey)
+```
+
+------------------------------------------------------------------------
+
+### Client Index
+
+This creates the org index table.
+
+```{r}
+dbOrgIndex <- function() {
+  cn <- hcaconfig::dbc("prod2", "hcaconfig")
+  on.exit(hcaconfig::dbd(cn))
+  store_index <- function(cn) {
+    qry <- "SELECT org_uuid, store_uuid, short_name as store FROM org_stores"
+    setDT(DBI::dbGetQuery(cn, qry), key = "org_uuid")[]
+  }
+  org_index <- function(cn) {
+    qry1 <- "SELECT org_uuid, short_name as org FROM org_info"
+    qry2 <- "SELECT * FROM org_pipelines_info"
+    res1 <- setkey(data.table(DBI::dbGetQuery(cn, qry1)), org_uuid)
+    res2 <- setkey(data.table(DBI::dbGetQuery(cn, qry2)), org_uuid)
+    out <- res1[res2[current_client & in_population], .(org_uuid, org)]
+    setkey(out, "org_uuid")[]
+  }
+  store_index(cn)[org_index(cn)]
+}
+```
+
+------------------------------------------------------------------------
+
+### API Access
+
+This creates the Leaflogix api credentials table.
+
+```{r}
+dbLeaflogixCreds <- function() {
+  cn <- hcaconfig::dbc("prod2", "hcaconfig")
+  on.exit(hcaconfig::dbd(cn))
+  qry <- "SELECT STORES.org_uuid, STORES.store_uuid, consumerkey, auth
+          FROM (SELECT * FROM org_credentials_leaflogix) CREDS
+          INNER JOIN (SELECT store_uuid, org_uuid FROM org_stores) STORES
+          ON CREDS.store_uuid = STORES.store_uuid"
+  setDT(DBI::dbGetQuery(cn, qry), key = c("org_uuid", "store_uuid"))[]
+}
+```
+
+------------------------------------------------------------------------
+
+### Pin to Connect
+
+This pins both to the connect server.
+
+```{r}
+active_clients <- dbOrgIndex()
+pin_write(board, active_clients, type = "rds")
+
+creds_leaflogix <- dbLeaflogixCreds()
+pin_write(board, creds_leaflogix, type = "rds")
+```
+
+------------------------------------------------------------------------
+
+## Example
+
+This is how to read those pins.
+
+```{r, eval=FALSE}
+board <- board_connect(server = apiUrl, key = apiKey)
+pin_read(board, "bobbyf/active_org_locations")
+```

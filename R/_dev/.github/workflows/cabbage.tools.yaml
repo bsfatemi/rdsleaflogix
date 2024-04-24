@@ -1,0 +1,92 @@
+on:
+  push:
+    branches: [main]
+
+name: PPM Release
+jobs:
+  build-check:
+    runs-on: ${{ matrix.config.os }}
+    name: ${{ matrix.config.os }} (${{ matrix.config.r }})
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {os: ubuntu-22.04,   r: '4.3'}
+          - {os: ubuntu-20.04,   r: '4.2'}
+          - {os: windows-latest,   r: '4.3'}
+          - {os: mac-latest,   r: '4.2'}
+
+    env:
+      R_KEEP_PKG_SOURCE: yes
+      GITHUB_PAT: ${{ secrets.GH_PAT }}
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Install System Dependencies
+        run: sudo apt-get update -y && sudo apt-get install -y libcurl4-openssl-dev
+
+      - name: Setup R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ matrix.config.r }}
+          use-public-rspm: true
+          Ncpus: 4
+
+      - name: Install R Dependencies
+        run: |
+          options(Ncpus = 4, repos = c(RSPM = Sys.getenv("RSPM")))
+          install.packages("remotes")
+          remotes::install_deps(dependencies = TRUE)
+        shell: Rscript {0}
+
+      - name: Build R Package
+        uses: r-lib/actions/check-r-package@v2
+        with:
+          args: 'c("--no-manual", "--install-args=--build")'
+          check-dir: '"check"'
+
+      - name: Post Coverage Report
+        run: |
+          covr::codecov(quiet = FALSE, clean = FALSE, install_path = file.path(Sys.getenv("RUNNER_TEMP"), "package"))
+        shell: Rscript {0}
+
+
+      - name: Prep R Package Builds
+        run: |
+          x <- readLines("DESCRIPTION")
+          v <- sub("Version: ", "", x[grep("Version: ", x)])
+          file.rename(list.files("check", full.names = TRUE, pattern = "linux"), "check/hcadscore_binary.tar.gz")
+          file.rename(list.files("check", full.names = TRUE, pattern = paste0(v, ".tar.gz")), "check/hcadscore_source.tar.gz")
+          file.copy("check/hcadscore_binary.tar.gz", "inst/tools/config/bin/hcadscore_binary.tar.gz")
+          unlink("check/hcadscore.Rcheck", recursive = TRUE)
+        shell: Rscript {0}
+
+      - name: Copy Package Builds to PPM
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.PPM_HOST }}
+          username: ${{ secrets.PPM_USER }}
+          key: ${{ secrets.PPM_KEY }}
+          port: ${{ secrets.PPM_PORT }}
+          source: check/*
+          target: .
+
+      - name: Add Package Source and Binary to PPM
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PPM_HOST }}
+          username: ${{ secrets.PPM_USER }}
+          key: ${{ secrets.PPM_KEY }}
+          port: ${{ secrets.PPM_PORT }}
+          script: |
+            rspm add --source=local-src \
+                --path=check/hcadscore_source.tar.gz \
+                --succeed-on-existing
+            rspm add binary --source=local-src --distribution=focal \
+                --path=check/hcadscore_binary.tar.gz \
+                --succeed-on-existing
+            rm -rf check

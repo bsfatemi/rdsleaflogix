@@ -1,0 +1,12 @@
+name: pl_execution_leaflogix
+title:
+username: bobbyf
+account: bobbyf
+server: cabbage.rest
+hostUrl: https://cabbage.rest/__api__
+appId: 492
+bundleId: 4314
+url: https://cabbage.rest/content/8e07811c-415b-46d7-b0fc-2b6b2939a077/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

@@ -1,0 +1,45 @@
+---
+title: "Happy Reports Theme"
+format:
+  posit-html: default
+author: Bobby Fatemi
+date: last-modified
+---
+
+## Introduction
+
+This is an example Quarto document that leverages a **Posit Theme.** This theme was created by replacing many of the core colors within the preexisting [cosmo](https://github.com/quarto-dev/quarto-cli/blob/main/src/resources/formats/html/bootstrap/themes/cosmo.scss) bootstrap theme.
+
+## Example Content
+
+::: {.callout-note appearance="simple"}
+## Figure 5
+
+Note
+:::
+
+::: callout-warning
+Warning
+:::
+
+::: callout-caution
+Caution
+:::
+
+::: callout-important
+Important
+:::
+
+::: callout-tip
+Tip
+:::
+
+::: panel-tabset
+## Tab 1
+
+Tab 1 Content
+
+## Tab 2
+
+Tab 2 Content
+:::

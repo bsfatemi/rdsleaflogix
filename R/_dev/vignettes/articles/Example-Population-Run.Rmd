@@ -1,0 +1,98 @@
+---
+title: "Build Population for a Single Location"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Build Population for a Single Location}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#"
+)
+
+t <- Sys.time()
+```
+
+```{r setup}
+library(rdleaflogix)
+```
+
+
+### Example
+
+Get population data for org `Verano` and store `meriden`
+
+```{r population, message=FALSE}
+arg <- get_leaflogix_index("verano", "meriden")
+
+org   <- arg$org
+store <- arg$store
+auth  <- arg$auth
+ckey  <- arg$consumerkey
+
+pop <- pl_population(org, store, auth, ckey)
+```
+
+```{r, echo = FALSE}
+run_dur <- as.numeric(Sys.time() - t)
+```
+
+> Pipeline completion Time (seconds): **`r run_dur`**
+
+## Internals
+
+This is the function definition for the `` function called above
+
+```{r, eval = FALSE}
+
+run_pop <- function(ncores = NULL, org = NULL, store = NULL, LB = FALSE) {
+  
+
+  ncores[is.null(ncores)] <- as.numeric(Sys.getenv("N_CORES", parallel::detectCores()))
+
+  ## Function to iterate with
+  fx <- function(x) {
+    do.call(pl_population, x[, .(org, store, auth, ckey = consumerkey, write = FALSE)])
+  }
+
+  ## Get args to iterate with
+  argsDT <- get_leaflogix_index()
+
+  ## filter args on org and store if provided
+  if (!is.null(org)) {
+    argsDT <- setkey(argsDT, org)[org]
+
+    if (!is.null(store))
+      argsDT <- setkey(argsDT, store)[store]
+  }
+
+  argsll <- setNames(split_by_row(argsDT), argsDT[, paste0(org, ".", store)])
+
+  if (ncores > 1) {
+    log_inf("...Beginning parallel run")
+
+    ## Make and init cluster
+    cl <- make_cluster(ncores) |>
+      init_cluster("pl_population")
+
+    ## Run pipeline
+    pll <- exec_cluster(cl, argsll, fx, LB) |>
+      setNames(names(argsll))
+
+    ## Close cluster
+    logsDT <- close_cluster(cl)
+
+  } else {
+    log_inf("...Beginning sequential run")
+
+    pll <- sapply(argsll, fx, simplify = FALSE)
+  }
+
+
+  return(pll)
+}
+
+```

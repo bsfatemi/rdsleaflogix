@@ -1,0 +1,12 @@
+name: leaflogix_pipeline_report
+title: Leaflogix Pipeline Report
+username: bobbyf
+account: bobbyf
+server: happycabbage.app
+hostUrl: https://happycabbage.app/__api__
+appId: 185
+bundleId: 1164
+url: https://happycabbage.app/pipeline/leaflogix/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

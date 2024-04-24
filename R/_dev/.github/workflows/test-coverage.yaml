@@ -1,0 +1,64 @@
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+name: test-coverage
+
+jobs:
+  test-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GITHUB_PAT: ${{ secrets.GH_PAT }}
+      HCA_DB_PWD: ${{ secrets.HCA_DB_PWD }}
+      CONNECT_SERVER: ${{ secrets.CONNECT_SERVER }}
+      CONNECT_API_KEY: ${{ secrets.CONNECT_API_KEY }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: r-lib/actions/setup-r@v2
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - name: Install openssl system dependancy
+        run: |
+          sudo apt-get install -y libcurl4-openssl-dev
+
+      - name: Query dependencies
+        run: |
+          options(repos = c(CRAN = "https://cloud.r-project.org"))
+          install.packages("remotes")
+          install.packages("covr")
+          saveRDS(remotes::dev_package_deps(dependencies = TRUE), ".github/depends.Rds", version = 2)
+          writeLines(sprintf("R-%i.%i", getRversion()$major, getRversion()$minor), ".github/R-version")
+        shell: Rscript {0}
+
+      - name: Restore R package cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.R_LIBS_USER }}
+          key: ${{ runner.os }}-${{ hashFiles('.github/R-version') }}-1-${{ hashFiles('.github/depends.Rds') }}
+          restore-keys: ${{ runner.os }}-${{ hashFiles('.github/R-version') }}-1-
+
+      - name: Install needed HCA dependencies (non Linux)
+        if: runner.os != 'Linux'
+        run: |
+          remotes::install_github("r-data-science/rdtools", type = "binary")
+        shell: Rscript {0}
+
+      - name: Install needed HCA dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          remotes::install_github("r-data-science/rdtools")
+        shell: Rscript {0}
+
+      - name: Install dependencies
+        run: |
+          remotes::install_deps(dependencies = TRUE, repos = "https://cloud.r-project.org")
+        shell: Rscript {0}
+
+      - name: Test coverage
+        run: covr::codecov()
+        shell: Rscript {0}

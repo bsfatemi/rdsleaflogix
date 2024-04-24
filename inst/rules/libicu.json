@@ -1,0 +1,20 @@
+{
+  "patterns": ["\\blibicu\\b"],  // regex which matches "libprotobuf" or "LIBPROTOBUF; libxml2"
+  "dependencies": [
+    {
+      "packages": ["libicu-dev"],  // to install the package: "yum install protobuf-devel"
+      "pre_install": [
+        {
+          "command": "sudo apt-get install -y libicu-dev"
+        }
+      ],
+      "constraints": [
+        {
+          "os": "linux",
+          "distribution": "ubuntu",  // make these instructions specific to CentOS 7
+          "versions": ["20.04"]
+        }
+      ]
+    }
+  ]
+}

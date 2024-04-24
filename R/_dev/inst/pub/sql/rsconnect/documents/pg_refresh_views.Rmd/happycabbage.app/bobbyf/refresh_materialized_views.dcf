@@ -1,0 +1,12 @@
+name: refresh_materialized_views
+title: Refresh Materialized Views
+username: bobbyf
+account: bobbyf
+server: happycabbage.app
+hostUrl: https://happycabbage.app/__api__
+appId: 221
+bundleId: 1280
+url: https://happycabbage.app/content/39daa835-ca27-4718-aff2-8d80cafcaf2b/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

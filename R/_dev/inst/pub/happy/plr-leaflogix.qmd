@@ -1,0 +1,185 @@
+---
+title: "Pipeline Reports - Leaflogix"
+css: doc.css
+format:
+  posit-html: default
+author: Bobby Fatemi
+execute: 
+  echo: false
+  warning: false
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Pipeline Reports - Leaflogix}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup}
+library(gt)
+library(data.table)
+library(rdleaflogix)
+library(lubridate)
+
+options(width = 3000)
+
+t <- now()
+
+source("table-presentation.R")
+```
+
+This executes and reports the status of the leaflogix pipeline, which (1) gets/extracts raw data from the API, and (2) builds/writes consolidated tables to the database
+
+> This report is generated daily, last updated at: **`r report_start`**
+
+# Pipeline Execution
+
+::: {.callout-tip appearance="simple"}
+### Run Details
+
+```{r run_pipeline, echo = TRUE, message = TRUE}
+nc <- Sys.getenv("N_CORES")
+res <- run_pl_leaflogix(nc)
+```
+:::
+
+```{r}
+run_dur <- round(as.numeric(difftime(now(), t, units = "mins")), 2)
+```
+
+> Pipeline completion Time (minutes): **`r run_dur`**
+
+```{r process_results, include = FALSE, message = FALSE}
+ll <- getCompletionSummary(DT = res$data)
+```
+
+```{r process_logs, message=TRUE, error=TRUE}
+tmp <- res$logs[get("Message") == "Leaflogix"]
+log_summ <- rdleaflogix:::summarize_logs(tmp)
+summLog <- log_summ[[1]]
+eventDT <- rbindlist(log_summ[2:4])
+errorDT <- rdleaflogix:::summarize_fail(tmp)
+```
+
+# Pipeline Logs
+
+::: {.callout-important appearance="simple"}
+### Log Summary
+
+The following shows all event counts, by Log Level and Process (Get/Extract/Build) during this execution.
+
+```{r log_1}
+showEventCounts(summLog)
+```
+:::
+
+::: {.callout-caution appearance="simple"}
+### Event Details
+
+The following summarizes the log events by Process (Get/Extract/or Build) and data source (Endpoint or Table).
+
+```{r log_2}
+showEventDetails(eventDT)
+```
+:::
+
+::: {.callout-caution appearance="simple"}
+### Failure Details
+
+The following table highlights where in the pipeline (Get/Extract/or Build) a failure occured, and which endpoint or table failed for each org and store location processed.
+
+```{r log_3}
+
+if (nrow(errorDT) > 0) {
+  showErrorDetails(errorDT)
+} else {
+  "No Errors"
+}
+  
+```
+:::
+
+# Pipeline Results
+
+::: panel-tabset
+## Brands
+
+```{r}
+ll$brand_index
+```
+
+## Categories
+
+```{r}
+ll$category_index
+```
+
+## Loyalty
+
+```{r}
+ll$customer_loyalty
+```
+
+## Customers
+
+```{r}
+ll$customer_summary
+```
+
+## Products
+
+```{r}
+ll$product_summary
+```
+
+## Orders
+
+```{r}
+ll$order_summary
+```
+
+## Items
+
+```{r}
+ll$order_items
+```
+
+## Inventory
+
+```{r}
+ll$stock_summary
+```
+
+## Stock Snapshot
+
+```{r}
+ll$stock_snapshot
+```
+
+## Stock Rooms
+
+```{r}
+ll$stock_by_room
+```
+
+## Labs
+
+```{r}
+ll$stock_lab_results
+```
+
+## Employees
+
+```{r}
+ll$store_employees
+```
+:::
+
+```{r clean}
+
+if (fs::dir_exists("log"))
+  fs::dir_delete("log")
+
+if (fs::file_exists("cluster.log"))
+  fs::file_delete("cluster.log")
+
+```

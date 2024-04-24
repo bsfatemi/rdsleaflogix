@@ -1,0 +1,259 @@
+---
+title: "Refresh Materialized Views"
+author: "Bobby Fatemi"
+date: "`r Sys.Date()`"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+    code_folding: show
+    theme:
+      highlight: tango
+      bg: "#ffffff"
+      fg: "#041E39"
+      primary: "#00A651"
+      secondary: "#187dd4"
+      base_font:
+        google: Prompt
+      heading_font:
+        google: Proza Libre
+---
+
+```{r setup, include=FALSE}
+library(lubridate)
+library(rdleaflogix)
+knitr::opts_chunk$set(echo = TRUE)
+cn_prod_int <- rdleaflogix::dbc("prod2", "integrated")
+cn_dev_appd <- rdleaflogix::dbc("dev2", "appdata")
+t <- Sys.time()
+```
+
+The following chunks are executed by this document. They refresh the enumerated materialized views on our prod and dev postgres servers.
+
+------------------------------------------------------------------------
+
+## (1) Recent Product Transactions
+
+Most recent 100 days of sales transactions in population. This is used in a number of pipelines and apps, and was initially created to reduce the runtime of generating product recommendations. This view is located in prod integrated database.
+
+```{sql refresh_1, connection=cn_prod_int, class.source = 'fold-show'}
+REFRESH MATERIALIZED VIEW CONCURRENTLY v100d_population2;
+```
+
+```{sql n_rows_1, connection=cn_prod_int, output.var = "n_rows_1", echo = FALSE}
+SELECT COUNT(*) FROM v100d_population2;
+```
+
+> Total rows contained in view: `r scales::comma(as.numeric(n_rows_1$count))`
+
+This view is located at `Prod/integrated/public/Materialized Views/v100d_population2`
+
+``` sql
+--- Create Script (Not Run)
+---
+CREATE MATERIALIZED VIEW v100d_population2
+AS
+ SELECT * FROM 
+  (SELECT DISTINCT ON (customer_id, phone, category3, brand_name, product_name)
+    org_uuid::uuid,
+    store_id::uuid AS store_uuid,
+    order_id,
+    pos_order_line_id AS order_item_id,
+    order_time_utc, 
+    customer_id, 
+    phone, 
+    category3, 
+    brand_name, 
+    product_name, 
+    product_sku,
+    SUM(product_qty) AS product_qty,
+    SUM(item_subtotal) AS item_subtotal,
+    SUM(item_discount) AS item_discount,
+    SUM(item_list_price) AS item_list_price,
+    AVG(order_subtot) AS order_subtotal,
+    AVG(order_disc) AS order_disc
+  FROM population2
+  WHERE order_time_utc > (CURRENT_DATE - '100 days'::interval DAY)
+   AND product_sku IS NOT NULL
+   AND order_id IS NOT NULL
+   AND pos_order_line_id IS NOT NULL 
+  GROUP BY order_time_utc, pos_order_line_id, order_id, org_uuid, store_id, 
+        product_sku, order_time_utc, customer_id, phone, category3, brand_name, 
+        product_name) temp
+ ORDER BY org_uuid, store_uuid, order_time_utc, category3
+
+WITH DATA;
+
+CREATE UNIQUE INDEX 
+    v100d_population2_id_utc_org_store_sku_uidx 
+ON 
+    v100d_population2 
+    (   
+        org_uuid, 
+        store_uuid, 
+        product_sku,
+        order_time_utc,
+        order_id,
+        order_item_id
+    );
+
+CREATE INDEX 
+    v100d_population2_org_idx 
+ON 
+    v100d_population2
+    ( 
+        org_uuid
+    );
+
+CREATE INDEX 
+    v100d_population2_org_store_idx 
+ON 
+    v100d_population2
+    ( 
+        org_uuid, 
+        store_uuid 
+    );
+
+
+CREATE INDEX 
+    v100d_population2_sku_idx
+ON 
+    v100d_population2 
+    ( 
+        product_sku
+    );
+
+CREATE INDEX 
+    v100d_population2_sku_org_store_idx
+ON 
+    v100d_population2 
+    ( 
+        product_sku,
+        org_uuid, 
+        store_uuid
+    );
+
+CREATE INDEX 
+    v100d_population2_utc_sku_org_store_idx 
+ON 
+    v100d_population2 
+    ( 
+        order_time_utc, 
+        product_sku,
+        store_uuid,
+        org_uuid
+    );
+```
+
+------------------------------------------------------------------------
+
+## (2) Products First and Last Sales
+
+View containing a list of all products and their first sold, and last sold dates found in population. This is used by the product recommendations API. This view is located in prod integrated database.
+
+```{sql refresh_2, connection=cn_prod_int, class.source = 'fold-show'}
+REFRESH MATERIALIZED VIEW CONCURRENTLY vproduct_history;
+```
+
+```{sql n_rows_2, connection=cn_prod_int, output.var = "n_rows_2", echo = FALSE}
+SELECT COUNT(*) FROM vproduct_history;
+```
+
+> Total rows contained in view: `r scales::comma(as.numeric(n_rows_2$count))`
+
+This view is located at `Prod/integrated/public/Materialized Views/vproduct_history`
+
+
+``` sql
+--- Create Script (Not Run)
+---
+CREATE MATERIALIZED VIEW vproduct_history
+AS
+ SELECT org_uuid::uuid, 
+   store_id::uuid AS store_uuid,
+   product_sku,
+   MIN(order_time_utc)::date AS first_order_date,
+   MAX(order_time_utc)::date AS last_order_date
+ FROM population2 
+ WHERE item_subtotal > 0
+  AND product_sku IS NOT NULL
+ GROUP BY org_uuid, store_id , product_sku
+WITH DATA;
+
+
+CREATE UNIQUE INDEX 
+    vproduct_history_org_store_sku_uidx 
+ON 
+    vproduct_history 
+    (   
+        org_uuid, 
+        store_uuid, 
+        product_sku
+    );
+```
+
+------------------------------------------------------------------------
+
+## (3) Products w/Velocity Metrics
+
+Index of all orgs, stores, and products included in table *product_velocity_daily*. This is used by the sku stockout explorer application. This view is located in dev appdata database.
+
+```{sql refresh_3, connection=cn_dev_appd, class.source = 'fold-show'}
+REFRESH MATERIALIZED VIEW CONCURRENTLY vindex_product_velocity_daily;
+```
+
+```{sql n_rows_3, connection=cn_dev_appd, output.var = "n_rows_3", echo = FALSE}
+SELECT COUNT(*) FROM vindex_product_velocity_daily;
+```
+
+> Total rows contained in view: `r scales::comma(as.numeric(n_rows_3$count))`
+
+This view is located at `Dev/appdata/public/Materialized Views/vindex_product_velocity_daily`
+
+
+``` sql
+--- Create Script (Not Run)
+---
+CREATE MATERIALIZED VIEW vindex_product_velocity_daily
+AS
+SELECT DISTINCT org_uuid, store_uuid, product_sku, category3, brand_name, image_url
+  FROM product_velocity_daily 
+  GROUP BY org_uuid, store_uuid, product_sku, category3, brand_name, image_url
+WITH DATA;
+
+CREATE UNIQUE INDEX 
+    vindex_product_velocity_daily_org_store_idx 
+ON 
+    vindex_product_velocity_daily
+    ( 
+        org_uuid,
+        store_uuid,
+        product_sku
+    );
+
+CREATE INDEX 
+    product_velocity_daily_org_store_sku_idx 
+ON 
+    product_velocity_daily
+    ( 
+        org_uuid,
+        store_uuid,
+        product_sku
+    );
+
+CREATE INDEX 
+    product_velocity_daily_org_store_sku_brand_category_idx 
+ON 
+    product_velocity_daily
+    ( 
+        org_uuid,
+        store_uuid,
+        product_sku,
+        category3,
+        brand_name
+    );
+```
+
+------------------------------------------------------------------------
+
+Execution completed at `r lubridate::now()`. Total run duration of `r round(as.numeric(Sys.time() - t)/60, 2)`

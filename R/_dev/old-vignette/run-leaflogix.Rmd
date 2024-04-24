@@ -1,0 +1,141 @@
+---
+title: "Leaflogix Get & Extract Pipelines"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Leaflogix Get & Extract Pipelines}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+This vignette explains and steps through the [full script shown here](https://github.com/r-data-science/rdleaflogix#pipeline-run-example "Package Readme Example"). This will run the get and extract pipelines for a sample of Leaflogix org locations and endpoints, and will execute this quickly in parallel.
+
+```{r setup, include = FALSE}
+library(rdleaflogix)
+library(parallel)
+library(data.table)
+library(knitr)
+library(pander)
+library(stringr)
+
+options(rmarkdown.html_vignette.check_title = FALSE)
+
+Sys.setenv(PROJ_DIR = path.expand("~/PROJECTS"))
+
+opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+##### Step 1: Create Cluster
+
+Use 4 nodes to process this pipeline job in parallel
+
+```{r make_cluster}
+cl <- makeCluster(4)
+```
+
+##### Step 2: Set Job Id
+
+Create an Id used for grouping log files across nodes into a shared directory, and export to all cluster nodes
+
+```{r make_job_id}
+jobId <- as.integer(Sys.time())
+print(jobId)
+clusterExport(cl, "jobId")
+```
+
+##### Step 3: Initialize Nodes
+
+Import package functions used on each node and open log file in shared directory. Note each node will have a log file named after the PID of that node, and all files will be created in a shared directory named after a common `jobId` exported to all nodes above.
+
+```{r init_node_environ}
+log_paths <- clusterEvalQ(cl, {
+  box::use(
+    rdleaflogix[...],
+    rdtools[open_log]
+  )
+  lf <- paste0("pid-", Sys.getpid())
+  open_log(lf, jobId)
+})
+```
+
+###### *`See log paths returned by each node`*
+
+The log paths (`log_paths`) are returned from each node in the cluster after calling `open_log` in the `clusterEvalQ` statement above.
+
+```{r clean_log_paths, echo = FALSE}
+
+log_paths <- str_replace(unlist(log_paths), Sys.getenv("PROJ_DIR"), "...")
+writeLines(log_paths)
+```
+
+##### Step 4: Get Pipeline Input Arguments
+
+Get pipeline inputs as a list. Each list element represents the parameters for a single pipeline run. The list contains all locations and endpoints needed to kickoff the full leaflogix pipeline.
+
+```{r pipeline_args}
+args <- get_pipeline_args()[1:5]
+```
+
+###### *`Preview Pipeline Job Inputs`*
+
+Here is a preview of the first set of arguments for the first pipeline run. Note this is the first element of the `args` list from above (`args[[1]]`)
+
+```{r show_args, echo = FALSE}
+row <- copy(args[[1]])
+row$auth <- str_trunc(row$auth, width = 10, side = "right")
+row$consumerkey <- str_trunc(row$auth, width = 10, side = "right")
+pander(row, split.table = Inf, justify = 'left')
+```
+
+##### Step 5: Run Pipeline Job
+
+Distribute pipeline inputs across clusters and run in parallel before collecting and binding results into a single output table.
+
+```{r run_job}
+OUT <- rbindlist(parLapply(cl, args, function(x) {
+  do.call(get_extract_ll, x)
+}))
+```
+
+###### *`Preview Job Output`*
+
+Here is a preview of the top rows in the results of the pipeline runs above. Note the column called `data` contains the table of data received and extracted from the API endpoint by location.
+
+```{r show_job_out, echo = FALSE, results = 'asis'}
+pander(head(OUT), split.table = Inf, justify = 'left')
+```
+
+##### Step 6: Clean Node Environment
+
+Close log and retrieve entries on log close, bind logs from all nodes, and stop cluster
+
+```{r clean_up}
+logs <- rbindlist(clusterEvalQ(cl, {
+  box::use(
+    data.table[setkey],
+    rdtools[close_log]
+  )
+  close_log()
+}))
+
+stopCluster(cl)
+```
+
+##### Step 7: Job Duration and View Logs
+
+Print duration of this pipeline run that gets and extracts 5 org locations and endpoints. Additionally, view the log events (`logs`) returned by the statement `close_log()` that ran on each node during cleanup.
+
+***Job Duration***
+
+```{r print_duration, echo = FALSE}
+dur <- logs[, max(TimestampUTC) - min(TimestampUTC)]
+print(dur)
+```
+
+***Job Logs***
+
+```{r print_logs, echo = FALSE}
+pander(logs, split.table = Inf, justify = 'left')
+```
